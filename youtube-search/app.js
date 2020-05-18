@@ -43,6 +43,28 @@ function crawl(){
   });
   });
 }
+
+const calcCoin = (day1, day2)=>{
+  var weekend = 0;
+  var weekday = 0;
+  var coin= 0;
+  while (true) {
+    var temp_date = day1;
+    if (temp_date.getTime() > day2.getTime() + 86400000) {
+      break;
+    } else {
+      var tmp = temp_date.getDay();
+      if (tmp === 0) {
+        weekend++;
+      } else {
+        weekday++;
+      }
+      temp_date.setDate(day1.getDate() + 1);
+    }
+  }
+  coin = (weekday*300) + (weekend*600) ;
+  return coin;
+}
 bot.on("ready", function(){ //봇이 준비되었을때
     console.log("ready"); //콘솔에 준비되었다고 띄우고
     bot.user.setActivity('김기정', {type: "PLAYING"}); //디스코드내의 "플레이중"을 '안녕하세요'로정한다.
@@ -78,6 +100,32 @@ bot.on("message", async function(message) { //메시지가 왔을때
                 }}).catch(err => console.log(err));
              break;
 
+        case "코인":
+            const now = new Date();
+            const end = new Date('2020/06/10');
+            const coin = calcCoin(now,end);
+
+            message.channel.send('현재 가진 코인 갯수를 입력하세요.');
+            filter = m => (m.author.id === message.author.id);
+            let collectedNumber = await message.channel.awaitMessages(filter, {maxMatches: 1});
+            let selectedNumber = collectedNumber.map(x=> x.content);
+            console.log(typeof(coin));
+
+            if(selectedNumber[0] == null){
+                message.channel.send('숫자를 입력하세요.');
+            }
+            else{
+                const now = new Date();
+                message.channel.send({
+                    embed: {
+                        title: 
+                        `${now.getMonth()+1}월 ${now.getDate()}일부터 ~ ${end.getMonth()+1}월 ${end.getDate()}일까지
+                         모을 수 있는 코인 갯수`,
+                        description: `${coin + parseInt(selectedNumber[0])}개 입니다.`,
+                    }}).catch(err => console.log(err));
+                    break;
+            }
+            
         case "코로나":
             await crawl();
             message.channel.send({
@@ -228,11 +276,11 @@ bot.on("message", async function(message) { //메시지가 왔을때
                         message.channel.send('노래 제목을 검색하세요!');
                         return;
                     }
-                    if(!message.member.voiceChannel){
+                    else if(!message.member.voiceChannel){
                         message.channel.send('채널에 참가 먼저하세요!');
                         return;
                     }
-                    if(!servers[message.guild.id]) servers[message.guild.id] = {
+                    else if(!servers[message.guild.id]) servers[message.guild.id] = {
                         queue: []
                     }
                     var server = servers[message.guild.id];                     
@@ -256,9 +304,19 @@ bot.on("message", async function(message) { //메시지가 왔을때
                             description: titles.join("\n")
                         }}).catch(err => console.log(err));
                     checkOverlap = true;
+
+                    // if(message.channel.deleted){
+                    //     console.log(message.channel.deleted);
+                    //     message.channel.send("취소 되었습니다.");
+                    //     checkOverlap = false;
+                    // }
     
-                    filter = m =>(m.author.id === message.author.id) && m.content >= 1 && m.content <= ytResults.length;
+                    filter = m =>(m.author.id === message.author.id) && m.content >= 1 && m.content <= ytResults.length || m.content == "cancel" || m.content == "취소";
                     let collected = await message.channel.awaitMessages(filter, {maxMatches: 1});
+                    if(collected.content == "cancel" || collected.content == "취소"){
+                        
+                    }
+                    console.log(collected);
                     let selected = ytResults[collected.first().content - 1];
                     server.queue.push(selected.link);
                     
