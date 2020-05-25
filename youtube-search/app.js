@@ -1,7 +1,7 @@
 const Discord = require("discord.js");
 const PREFIX = "!"
 const config =require('./config.json');
-const search = require('youtube-search');
+const search = require('yt-search');
 const ytdl = require("ytdl-core");
 let request = require('request');
 let cheerio = require('cheerio');
@@ -9,11 +9,7 @@ const axios = require('axios');
 const url = 'http://happycastle.club/';
 var bot = new Discord.Client();
 var servers = {};
-const opts = {
-    maxResults: 10,
-    key: config.YOUTUBE_API,
-    type: 'video'
-};
+
 const streamOptions ={
     seek: 0,
     volume: 1
@@ -44,6 +40,25 @@ function crawl(){
   });
 }
 
+ function play(connection, message){
+    var server = servers[message.guild.id];
+                            
+    server.dispatcher = connection.playStream(ytdl(server.queue[0], {filter: "audioonly",highWaterMark: 1<<25}), streamOptions);
+        server.queue.shift();
+                            
+            server.dispatcher.on("end", function(){
+                if(server.queue[0]){
+                    setTimeout(()=>{ 
+                        play(connection, message);
+                        playList.shift();
+                    }, 5000);
+                                   
+                }else {
+                    connection.disconnect();
+                }
+            });
+}
+
 const calcCoin = (day1, day2)=>{
   var weekend = 0;
   var weekday = 0;
@@ -65,6 +80,7 @@ const calcCoin = (day1, day2)=>{
   coin = (weekday*300) + (weekend*600) ;
   return coin;
 }
+
 bot.on("ready", function(){ //봇이 준비되었을때
     console.log("ready"); //콘솔에 준비되었다고 띄우고
     bot.user.setActivity('김기정', {type: "PLAYING"}); //디스코드내의 "플레이중"을 '안녕하세요'로정한다.
@@ -87,7 +103,7 @@ bot.on("message", async function(message) { //메시지가 왔을때
         case "도움말":
             message.channel.send({
                 embed: {
-                    title: '기정김 명령어 목록',
+                    title: '꿀벌봇 명령어 목록',
                     description: 
                     `\:mask: 코로나
 
@@ -232,13 +248,28 @@ bot.on("message", async function(message) { //메시지가 왔을때
         case "꺼져":           
         case "나가":
             if (message.member.voiceChannel) {
-                message.member.voiceChannel.leave()
+                var server = servers[message.guild.id];
+                message.member.voiceChannel.leave();
               } else {
                 message.channel.send('채널에 참가 먼저해라');
               }
               break;
 
         case '재생':
+            var server = servers[message.guild.id];
+            if(message.guild.voiceConnection){
+                if(server.dispatcher.paused){
+                    server.dispatcher.resume();
+                    console.log('노래 재생');
+                }else(
+                    message.member.voiceChannel.join()
+                        .then((connection) => {
+                            play(connection, message);
+                        })
+                );
+            }
+            break;    
+
         case '노래':
         case '찾기':
         case '노':
@@ -252,97 +283,88 @@ bot.on("message", async function(message) { //메시지가 왔을때
                 find2 = args[1];
             }
 
-                let results = await search(find2, opts).catch(err => console.log(err));
-                if(results){
-                    function play(connection, message){
-                        var server = servers[message.guild.id];
-                        
-                        server.dispatcher = connection.playStream(ytdl(server.queue[0], {filter: "audioonly",highWaterMark: 1<<25}), streamOptions);
-                        server.queue.shift();
-                        
-                        server.dispatcher.on("end", function(){
-                            if(server.queue[0]){
-                                setTimeout(()=>{ 
-                                    play(connection, message);
-                                    playList.shift();
-                                },5000);
-                               
-                            }else {
-                                connection.disconnect();
-                            }
-                        });
-                      }
-                    if(!args[1]){
-                        message.channel.send('노래 제목을 검색하세요!');
-                        return;
-                    }
-                    else if(!message.member.voiceChannel){
-                        message.channel.send('채널에 참가 먼저하세요!');
-                        return;
-                    }
-                    else if(!servers[message.guild.id]) servers[message.guild.id] = {
-                        queue: []
-                    }
-                    var server = servers[message.guild.id];                     
-                    
-                    let ytResults = results.results;
-                    let i = 0;
-                    let titles = ytResults.map(result => {
-                        i++;
-                        return i + ") " + result.title;
-                    });
+                await search({
+                    query: find2,
+                    pageStart:1,
+                    pageEnd: 1,
+                }, 
+                async function(err, r){
+                    if (r){
 
-                    //노래검색 완료전에 다시 노래 검색하면 리턴.
-                    if(checkOverlap){
-                        message.channel.send("먼저 노래를 고르세요!");
-                        return;
-                    }
 
-                    message.channel.send({
-                        embed: {
-                            title: '번호로 노래를 고르세요',
-                            description: titles.join("\n")
-                        }}).catch(err => console.log(err));
-                    checkOverlap = true;
-
-                    // if(message.channel.deleted){
-                    //     console.log(message.channel.deleted);
-                    //     message.channel.send("취소 되었습니다.");
-                    //     checkOverlap = false;
-                    // }
-    
-                    filter = m =>(m.author.id === message.author.id) && m.content >= 1 && m.content <= ytResults.length || m.content == "cancel" || m.content == "취소";
-                    let collected = await message.channel.awaitMessages(filter, {maxMatches: 1});
-                    if(collected.content == "cancel" || collected.content == "취소"){
-                        
-                    }
-                    console.log(collected);
-                    let selected = ytResults[collected.first().content - 1];
-                    server.queue.push(selected.link);
-                    
-                   
-                    playList.push( 
-                        {
-                            user: message.author.username,
-                            songTitle: selected.title
+                        if(!args[1]){
+                            message.channel.send('노래 제목을 검색하세요!');
+                            return;
                         }
-                    );
 
-                    embed = new Discord.RichEmbed()
-                    .setTitle(`${selected.title}`)
-                    .setURL(`${selected.link}`)
-                    .setDescription(`${selected.description}`)
-                    .setThumbnail(`${selected.thumbnails.default.url}`); 
-   
-                    message.channel.send(embed);
-                    checkOverlap = false;
-                    if(!message.guild.voiceConnection) message.member.voiceChannel.join()
-                    .then(function(connection){
-                        play(connection, message);
-                    });
-                    
-                }
-            
+                        else if(!message.member.voiceChannel){
+                            message.channel.send('채널에 참가 먼저하세요!');
+                            return;
+                        }
+
+                        else if(!servers[message.guild.id]) servers[message.guild.id] = { queue: [] }
+                        var server = servers[message.guild.id];  
+
+                        let ytResults = r.videos;
+                        ytResults.splice(10);
+                        let i = 0;
+                        let titles = ytResults.map(result => {
+                            i++;
+                            return i + ") " + result.title + '  \:arrow_forward:  ' + result.timestamp;
+                        });
+
+                        //노래검색 완료전에 다시 노래 검색하면 리턴.
+                        if(checkOverlap){
+                            message.channel.send("먼저 노래를 고르세요!");
+                            return;
+                        }
+
+                        message.channel.send({
+                            embed: {
+                                title: '번호로 노래를 고르세요',
+                                description: titles.join("\n"),
+                            }}).catch(err => console.log(err));
+                        checkOverlap = true;
+
+                        filter = m =>(m.author.id === message.author.id) && 
+                            m.content >= 1 && 
+                            m.content <= ytResults.length || 
+                            m.content === '취소' ||
+                            m.content === 'cancel';
+                        let collected = await message.channel.awaitMessages(filter, {maxMatches: 1});
+                        console.log(collected);
+                        let selected = ytResults[collected.first().content - 1];
+                        console.log(selected);
+                        server.queue.push(selected.url);
+                       
+                        playList.push( 
+                            {
+                                user: message.author.username,
+                                songTitle: selected.title
+                            }
+                        );
+
+                        embed = new Discord.RichEmbed()
+                        .setTitle(`${selected.title}`)
+                        .setURL(`${selected.url}`)
+                        .setDescription(`${selected.description}`)
+                        .setThumbnail(`${selected.thumbnail}`); 
+
+                        message.channel.send(embed);
+                        
+                        checkOverlap = false;
+                        if(!message.guild.voiceConnection) message.member.voiceChannel.join()
+                        .then((connection) => {
+                            play(connection, message);
+                        });
+                        if(message.guild.voiceConnection && !playList[1])  message.member.voiceChannel.join()
+                        .then((connection) => {
+                            play(connection, message);
+                        });
+
+                    }
+                });
+        
         break;
             
         
@@ -357,12 +379,11 @@ bot.on("message", async function(message) { //메시지가 왔을때
                 for(var i = server.queue.length -1; i >=0; i--){
                     server.queue.splice(i, 1);
                 }
-
-                server.dispatcher.end();
+                server.dispatcher.pause();
                 console.log('노래 정지');
             }
 
-            if(message.guild.connection) message.guild.voiceConnection.disconnect();   
+            // if(message.guild.connection) message.guild.voiceConnection.disconnect();   
         break;     
 
         case 'list':
