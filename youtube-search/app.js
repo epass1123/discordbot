@@ -1,11 +1,11 @@
-const Discord = require("discord.js");
+const  Discord = require("discord.js");
 const PREFIX = "!"
 const config =require('./config.json');
 const search = require('yt-search');
+const fs = require('fs');
 const ytdl = require("ytdl-core");
 let request = require('request');
 let cheerio = require('cheerio');
-const axios = require('axios');
 const url = 'http://happycastle.club/';
 var bot = new Discord.Client();
 var servers = {};
@@ -59,6 +59,10 @@ function crawl(){
             });
 }
 
+function emoji (name) {
+    return bot.emojis.find(emoji => emoji.name === name).toString();
+}
+
 const calcCoin = (day1, day2)=>{
   var weekend = 0;
   var weekday = 0;
@@ -77,6 +81,7 @@ const calcCoin = (day1, day2)=>{
       temp_date.setDate(day1.getDate() + 1);
     }
   }
+  console.log(weekend, weekday)
   coin = (weekday*300) + (weekend*600) ;
   return coin;
 }
@@ -112,13 +117,17 @@ bot.on("message", async function(message) { //메시지가 왔을때
                      \:x: 스킵
 
                      \:scroll: 큐 (list,ㅋ,queue,q)
+ 
+                     ${emoji("coin")}코인
+
+                     ${emoji("muto")}무토
                     `
                 }}).catch(err => console.log(err));
              break;
 
         case "코인":
             const now = new Date();
-            const end = new Date('2020/06/10');
+            const end = new Date('2020/09/02');
             const coin = calcCoin(now,end);
 
             message.channel.send('현재 가진 코인 갯수를 입력하세요.');
@@ -142,6 +151,13 @@ bot.on("message", async function(message) { //메시지가 왔을때
                     break;
             }
             
+        case "무토":
+            const image = {
+                src: "https://t1.daumcdn.net/cfile/tistory/998B2A4F5B7A9EA115",
+            }
+            message.channel.send(image.src);
+            break;
+
         case "코로나":
             await crawl();
             message.channel.send({
